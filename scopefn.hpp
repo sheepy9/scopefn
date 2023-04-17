@@ -7,9 +7,22 @@ namespace scopefn {
 
 namespace scopefn_internal {
 
+/**
+ * @brief Helper alias to unwrap CV qualifiers from a type T.
+ * For example if T = const& Animal then base_type = Animal
+ * 
+ * @tparam T 
+ */
 template<typename T>
 using base_type = typename std::remove_cv<typename std::remove_reference<T>::type>::type;
 
+/**
+ * @brief Helper struct used for template argument deduction on
+ * std::function<R(A)>.
+ *
+ * @tparam RT - return type
+ * @tparam AT - argument type
+ */
 template<typename RT, typename AT>
 struct FuncType
 {
@@ -18,6 +31,13 @@ struct FuncType
     using argument_type = AT;
 };
 
+/**
+ * @brief Helper struct used for template argument deduction on
+ * std::function<R(void)>. This struct exists because void cannot be deduced
+ * from the regular FuncType struct
+ *
+ * @tparam RT - return type
+ */
 template<typename RT>
 struct FuncTypeNoArg
 {
@@ -42,6 +62,12 @@ struct LambdaReflection
     using argument_type = base_type<typename decltype(FuncType(std::function(std::declval<T>())))::argument_type>;
 };
 
+/**
+ * @brief Same as LambdaReflection, but for lambdas that accept no args, since
+ * void arg type cannot be deduced by std::function.
+ *
+ * @tparam T
+ */
 template<typename T>
 struct LambdaReflectionNoArg
 {
@@ -62,6 +88,16 @@ struct LambdaReflectionNoArg
 template<typename Base>
 struct ScopeFunctions
 {
+    /**
+     * @brief The `let` scope function accepts the context object via argument
+     * and returns the lambda result.
+     *
+     * @example animal.let([](Animal& it) { it.doSomething(); });
+     *
+     * @tparam L
+     * @param lambda
+     * @return scopefn_internal::LambdaReflection<L>::return_type
+     */
     template<typename L>
     auto let(L lambda) -> typename scopefn_internal::LambdaReflection<L>::return_type
     {
@@ -71,12 +107,32 @@ struct ScopeFunctions
         return lambda(*static_cast<Base *>(this));
     }
 
+    /**
+     * @brief The `run` scope function accepts the context object through lambda
+     * capture and returns the lambda result.
+     *
+     * @example animal.run([self = &animal] { self->doSomething(); });
+     *
+     * @tparam L
+     * @param lambda
+     * @return scopefn_internal::LambdaReflectionNoArg<L>::return_type
+     */
     template<typename L>
     auto run(L lambda) -> typename scopefn_internal::LambdaReflectionNoArg<L>::return_type
     {
         return lambda();
     }
 
+    /**
+     * @brief The `apply` scope function accepts the context object through
+     * lambda capture and returns a reference to the same context object.
+     *
+     * @example animal.apply([self = &animal] { self->doSomething(); });
+     *
+     * @tparam L
+     * @param lambda
+     * @return Base&
+     */
     template<typename L>
     auto apply(L lambda) -> Base&
     {
@@ -85,6 +141,16 @@ struct ScopeFunctions
         return *static_cast<Base *>(this);
     }
 
+    /**
+     * @brief The `also` scope function accepts the context object as an
+     * argument and returns a reference to the same context object.
+     *
+     * @example animal.apply([](Animal& it) { it.doSomething(); });
+     *
+     * @tparam L
+     * @param lambda
+     * @return Base&
+     */
     template<typename L>
     auto also(L lambda) -> Base&
     {
@@ -94,15 +160,17 @@ struct ScopeFunctions
             "type");
 
         lambda(*static_cast<Base*>(this));
-        return *static_cast<Base *>(this);
+        return *static_cast<Base*>(this);
     }
 };
 
-
 /**
- * @brief Freestanding let function.
- * 
- * @tparam T 
+ * @brief Freestanding let scope function. The `let` scope function accepts the
+ * context object via argument and returns the lambda result.
+ *
+ * @example animal | let([](Animal& it){ it.doSomething(); });
+ *
+ * @tparam T
  */
 template <typename L>
 struct let
@@ -115,6 +183,15 @@ struct let
     std::function<RT(ARG &)> fun;
 };
 
+/**
+ * @brief Chaining operator for the frestanding let function
+ * 
+ * @tparam T 
+ * @tparam L 
+ * @param contextObject 
+ * @param lambda 
+ * @return let<L>::RT 
+ */
 template<typename T, typename L>
 auto operator|(T& contextObject, let<L>&& lambda) -> typename let<L>::RT
 {
@@ -124,6 +201,15 @@ auto operator|(T& contextObject, let<L>&& lambda) -> typename let<L>::RT
     return lambda(contextObject);
 }
 
+/**
+ * @brief Chaining operator for the freestanding let function
+ * 
+ * @tparam T 
+ * @tparam L 
+ * @param contextObject 
+ * @param lambda 
+ * @return let<L>::RT 
+ */
 template<typename T, typename L>
 auto operator|(T&& contextObject, let<L>&& lambda) -> typename let<L>::RT
 {
@@ -133,6 +219,14 @@ auto operator|(T&& contextObject, let<L>&& lambda) -> typename let<L>::RT
     return lambda(contextObject);
 }
 
+/**
+ * @brief Freestanding run scope function. The `run` scope function accepts the
+ * context object through lambda capture and returns the lambda result.
+ *
+ * @example animal | run([self = &animal]{ self->doSomething(); });
+ *
+ * @tparam L
+ */
 template <typename L>
 struct run
 {
@@ -146,18 +240,45 @@ struct run
     std::function<RT(void)> fun;
 };
 
+/**
+ * @brief Chaining operator for the run scope function
+ * 
+ * @tparam T 
+ * @tparam L 
+ * @param contextObject 
+ * @param lambda 
+ * @return run<L>::RT 
+ */
 template<typename T, typename L>
 auto operator|(T& contextObject, run<L>&& lambda) -> typename run<L>::RT
 {
     return lambda();
 }
 
+/**
+ * @brief Chaining operator for the run scope function
+ * 
+ * @tparam T 
+ * @tparam L 
+ * @param contextObject 
+ * @param lambda 
+ * @return run<L>::RT 
+ */
 template<typename T, typename L>
 auto operator|(T&& contextObject, run<L>&& lambda) -> typename run<L>::RT
 {
     return lambda();
 }
 
+/**
+ * @brief Freestanding with scope function. The with scope function accepts the
+ * context object via lambda capture and returns the lambda result. The with
+ * scope function only exists as freestanging and cannot be chained.
+ *
+ * @example animal | with([self = &animal]{ self->doSomething(); });
+ *
+ * @tparam L
+ */
 template <typename L>
 struct with
 {
@@ -171,6 +292,15 @@ struct with
     std::function<RT(void)> fun;
 };
 
+/**
+ * @brief Freestanding also function. The `also` scope function accepts the
+ * context object as an argument and returns a reference to the same context
+ * object.
+ *
+ * @example animal | also([](Animal& it){ it.doSomething(); });
+ *
+ * @tparam L
+ */
 template <typename L>
 struct also
 {
@@ -186,6 +316,15 @@ struct also
     std::function<RT(ARG &)> fun;
 };
 
+/**
+ * @brief Chaining operator for the freestanding also function.
+ * 
+ * @tparam T 
+ * @tparam L 
+ * @param contextObject 
+ * @param lambda 
+ * @return also<L>::ARG& 
+ */
 template<typename T, typename L>
 auto operator|(T& contextObject, also<L>&& lambda) -> typename also<L>::ARG&
 {
@@ -195,6 +334,15 @@ auto operator|(T& contextObject, also<L>&& lambda) -> typename also<L>::ARG&
     return lambda(contextObject);
 }
 
+/**
+ * @brief Chaining operator for the freestanding also function.
+ * 
+ * @tparam T 
+ * @tparam L 
+ * @param contextObject 
+ * @param lambda 
+ * @return also<L>::ARG& 
+ */
 template<typename T, typename L>
 auto operator|(T&& contextObject, also<L>&& lambda) -> typename also<L>::ARG&
 {
