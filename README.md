@@ -57,13 +57,18 @@ class Animal : public scopefn::ScopeFunctions<Animal> {
 using namespace scopefn;
 
 Animal animal;
-animal.let([](Animal& it) { it.doSomething(); });
+std::string name = animal.apply([self = &animal]{ self->doSomething(); })
+                         .also([](Animal& it){ it.doSomethingElse();})
+                         .let([](Animal& it){ return it.getName();});
 ```
 Or use them as freestanding functions with the | operator if you cannot use inheritance for the given type:
 
 ``` cpp
-Animal animal;
-animal | scopefn::let([](Animal& it){ it.doSomething(); });
+using namespace scopefn;
+std::vector<int> vec;
+int max = vec | also([](std::vector<int>& it){ it.push_back(2);}) 
+              | also([](std::vector<int>& it){ it.push_back(3);})
+              | let([](std::vector<int>& it) { return *std::max_element(it.begin(),it.end()).base();});
 ```
 
 ## Scope Functions
