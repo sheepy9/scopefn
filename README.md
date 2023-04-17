@@ -16,8 +16,8 @@ This is what the equivalent `scopefn` implementation in C++ enables:
 ``` cpp
 Person("Alice", 20, "Amsterdam").let([](Person& it){
     std::cout << it << std::endl;
-    it.moveTo("London")
-    it.incrementAge()
+    it.moveTo("London");
+    it.incrementAge();
     std::cout << it << std::endl;
 })
 ```
